@@ -3,26 +3,32 @@
 ## Stack
 
 - **Server:** Node 18+ (stdlib only), `node server.js`, listens on `$PORT`
-  (default 3000) on localhost.
-- **Public HTTPS:** Cloudflare quick tunnel (`cloudflared tunnel --url
-  http://localhost:3000`) — free, no account, serves `https://<random>.trycloudflare.com`
-  on port 443. No card, no payment.
-- **Persistence:** both processes run under `nohup` (see `start.sh`);
-  the server restarts itself in a loop if it crashes.
+  (default 3000) on localhost. Restart loop in `start.sh`.
+- **Public HTTPS:** localtunnel, fixed subdomain **`yetu-vfy`** →
+  **https://yetu-vfy.loca.lt** (free, no account, standard 443).
+  The client is a patched localtunnel 2.0.2 in `tunnel-client/` (see
+  `tunnel-client/README.md`): it does its own HTTP CONNECT through the
+  sandbox egress proxy, because the stock client bypasses the proxy and
+  hangs. Restart loop in `start.sh`; health watchdog in
+  `tunnel-watchdog.sh` (polls the public `/health` every 30s, restarts the
+  tunnel after 3 consecutive failures — the fixed subdomain keeps the URL
+  stable across restarts).
+- **Persistence:** `./start.sh` starts server loop + tunnel loop +
+  watchdog. Check status with `./start.sh status`.
 
 ## Start / restart
 
 ```bash
 cd ~/workspace/agent-games
-./start.sh        # starts server + tunnel, logs to server.log / tunnel.log
-./start.sh stop   # stops both
+./start.sh          # starts everything
+./start.sh status   # server/tunnel/watchdog PIDs + local /health
+./start.sh stop     # stops everything
+./start.sh restart  # stop + start
 ```
 
-The tunnel URL is printed in `tunnel.log` (look for
-`https://<random>.trycloudflare.com`). **The URL changes every time the
-tunnel restarts** — after a restart, update the endpoint URL on the
-Agent Games dashboard. `curl https://<url>/health` must return
-`{"protocol":"v1","status":"ok",...}`.
+The tunnel needs ~30-60s after (re)start before the public URL answers
+(the data channel connects slowly through the proxy). Verify with:
+`curl https://yetu-vfy.loca.lt/health` → `{"protocol":"v1",...}`.
 
 ## HMAC secret (after dashboard registration)
 
@@ -39,10 +45,38 @@ check passes), but signed turns and the preflight return 500. The strategy
 salt + commitment are already in `.env` on the host — do NOT copy them
 into the repo.
 
+## Reliability caveat (read this)
+
+This VM's egress is **proxy-only** (HTTP CONNECT). Two consequences:
+
+1. **cloudflared does NOT work here** — it ignores the proxy env vars and
+   its TLS handshake to `api.trycloudflare.com` fails
+   ("first record does not look like a TLS handshake"). Tried and confirmed.
+2. **localtunnel works but is flaky here** — the allocation (port 443) is
+   fast, but the data channel connects to a random high port, which the
+   egress proxy handles very slowly (6-25s to connect, sometimes hangs for
+   minutes) and can silently drop. End-to-end it IS verified working
+   (signed POST → signed response → Groth16 proof verifies, 1.4s when the
+   tunnel is up), but under bursts it can return 408 (only 2 concurrent
+   tunnel connections) and idle connections can die silently. The watchdog
+   + restart loop + fixed subdomain mitigate this, but they cannot make it
+   rock-solid.
+
+**Recommendation for the matches:** run this same repo on a host with
+direct internet (user VPS / PC). There, `cloudflared tunnel --protocol http2
+--url http://localhost:3000` (or the stock localtunnel client) gives a
+stable public HTTPS endpoint with no proxy in the way. The code, the
+strategy, the commitment and the HMAC handling are identical — only the
+tunnel command changes. If ngrok is available, it is also a good fit
+(443 data channel + proxy-aware client) but needs a free account/authtoken.
+
 ## Failure modes
 
-- Tunnel down → endpoint unreachable → platform marks the task forfeit.
-  Check `tunnel.log`; restart with `./start.sh restart`.
-- Server down → `start.sh` restarts it automatically (loop).
-- VM reboot → both processes die; run `./start.sh` again and update the
-  dashboard URL if the tunnel hostname changed.
+- Tunnel down → endpoint returns 502/503/408 → platform marks the task
+  forfeit. The watchdog restarts the tunnel; check `tunnel-lt.log` and
+  `watchdog.log`. If the tunnel stays down for minutes, the egress proxy
+  is likely throttling the data-channel port — wait and retry, or move the
+  deployment to a direct-internet host (above).
+- Server down → `start.sh` restart loop brings it back automatically.
+- VM reboot → run `./start.sh` again; the public URL is unchanged
+  (fixed subdomain `yetu-vfy`).

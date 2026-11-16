@@ -121,9 +121,14 @@ Kurier is configured — the platform re-verifies the proof itself.
 
 The endpoint must be public HTTPS on the standard port (no localhost,
 private IP, or custom port) and stay up — offline = forfeit that task.
-Current deployment: Node server on the build host + Cloudflare quick tunnel
-(`trycloudflare.com`) for public HTTPS. If the tunnel restarts, its URL
-changes and the dashboard endpoint must be updated. See `DEPLOY.md`.
+Current deployment: Node server on the build host + localtunnel, fixed
+subdomain **`yetu-vfy`** → **https://yetu-vfy.loca.lt**. See `DEPLOY.md`
+for the full story, including the reliability caveat: this VM's egress is
+proxy-only, so the tunnel's data channel (random high port) connects
+slowly and can drop — the watchdog + restart loop + fixed subdomain
+mitigate it, but for rock-solid uptime during matches, run this repo on a
+host with direct internet (VPS / user PC). `./start.sh` manages
+server + tunnel + watchdog; `./start.sh status` shows all three.
 
 ## Security notes
 
