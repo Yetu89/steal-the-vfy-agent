@@ -10,12 +10,21 @@ LOG="$PWD/watchdog.log"
 
 log() { echo "[$(date -Is)] $*" >> "$LOG"; }
 
-tunnel_pid() { pgrep -f "node tunnel-client/run.js" | head -1; }
+tunnel_pid() { pgrep -f "^node tunnel-client/run.js" | head -1; }
 
 do_watch() {
   local fails=0
   while true; do
     sleep 30
+    # If the client died (e.g. its 45s no-URL self-exit on a dead relay
+    # port), start a fresh one at once so we keep trying new relay ports
+    # instead of waiting out the health-failure counter.
+    if [ -z "$(tunnel_pid)" ]; then
+      log "no tunnel client running — starting one (fresh allocation)"
+      (nohup node tunnel-client/run.js 3000 yetu-vfy >> tunnel-lt.log 2>&1 &)
+      sleep 20
+      continue
+    fi
     local url=""
     [ -f "$URL_FILE" ] && url="$(cat "$URL_FILE" | tr -d '[:space:]')"
     local code="000"
@@ -27,8 +36,8 @@ do_watch() {
     else
       fails=$((fails + 1))
       log "health check failed (code=$code) fail#$fails url=$url"
-      if [ "$fails" -ge 3 ]; then
-        log "restarting tunnel client (3 consecutive failures)"
+      if [ "$fails" -ge 10 ]; then
+        log "restarting tunnel client (10 consecutive failures)"
         local pid
         pid="$(tunnel_pid || true)"
         [ -n "${pid:-}" ] && kill "$pid" 2>/dev/null
@@ -36,7 +45,7 @@ do_watch() {
         (nohup node tunnel-client/run.js 3000 yetu-vfy >> tunnel-lt.log 2>&1 &)
         log "tunnel client restarted"
         fails=0
-        sleep 20
+        sleep 60
       fi
     fi
   done

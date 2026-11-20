@@ -101,7 +101,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const pre = await req('POST', '/agent', { type: 'preflight' }, { 'x-agent-games-signature': hmac(SECRET, JSON.stringify({ type: 'preflight' })) });
   const preBody = JSON.parse(pre.body);
   check('preflight 200 signed', pre.status === 200 && pre.headers['x-agent-games-signature'] === hmac(SECRET, Buffer.from(pre.body, 'utf8')));
-  check('preflight protocol v1', preBody.protocol === 'v1');
+  check('preflight protocol v1', preBody.ok === true && preBody.protocolVersion === 'v1');
 
   // 5. Real turn: EXTRACT (self 100, opp 100) -> proof verifies locally
   const turn = { matchId: 1, turn: 1, gameState: { myBalance: 100, opponentBalance: 100 } };

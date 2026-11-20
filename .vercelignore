@@ -1,0 +1,33 @@
+# Local-only files — not deployed to Vercel.
+# server.js MUST be excluded: Vercel treats a root server.js as the
+# entrypoint ("Using server.js as the root entrypoint"), which breaks the
+# api/ serverless functions. The Vercel adapter (api/index.js) uses
+# lib/core.js instead and never imports server.js.
+server.js
+.env
+.env.example
+test-local.js
+probe*.js
+tunnel-client
+tunnel-*.sh
+tunnel-*.log
+tunnel.log
+tunnel2.log
+tunnel4.log
+cf-tunnel.log
+lt.log
+tunnel-debug.log
+tunnel-hunt.log
+tunnel-lt.log
+tunnel-lt2.log
+watchdog.log
+server.log
+proxy-relay.log
+proxy-relay.js
+run-direct.sh
+start.sh
+tunnel-watchdog.sh
+bin
+yetu-vfy-migrate.tar.gz
+DEPLOY.md
+README.md

@@ -18,7 +18,7 @@
 
 const crypto = require('crypto');
 const { config } = require('../config');
-const { readEnvelope, handleTurn } = require('../server');
+const { readEnvelope, handleTurn } = require('../lib/core');
 
 const MAX_BODY = 1024 * 1024; // 1 MB
 

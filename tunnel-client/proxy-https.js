@@ -32,6 +32,10 @@ function connectViaProxy(targetHost, targetPort) {
     const proxy = proxyParts();
     if (!proxy) return resolve(net.connect({ host: targetHost, port: targetPort }));
     const sock = net.connect(proxy.port, proxy.host);
+    // A CONNECT that never answers must fail instead of hanging forever:
+    // the egress proxy sometimes black-holes CONNECTs to certain relay ports.
+    const connTimer = setTimeout(() => fail(new Error(`proxy CONNECT ${targetHost}:${targetPort} timed out after 15000ms`)), 15000);
+    sock.on('close', () => clearTimeout(connTimer));
     let settled = false;
     let buf = Buffer.alloc(0);
     const fail = (err) => {
@@ -55,6 +59,7 @@ function connectViaProxy(targetHost, targetPort) {
       const status = Number((buf.slice(0, end).toString('utf8').split(' ')[1] || '0'));
       if (status !== 200) return fail(new Error(`proxy CONNECT ${targetHost}:${targetPort} -> HTTP ${status}`));
       settled = true;
+      clearTimeout(connTimer);
       sock.removeAllListeners('data');
       const rest = buf.slice(end + 4);
       if (rest.length) sock.unshift(rest);

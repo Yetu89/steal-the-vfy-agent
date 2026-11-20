@@ -28,6 +28,14 @@ tunnel.on('close', () => {
   process.exit(1);
 });
 
+// If the relay port never answers, the cluster hangs silently forever.
+// Exit so the watchdog restarts us with a fresh allocation (new port).
+const urlTimer = setTimeout(() => {
+  console.error('[tunnel] no URL within 45s — relay port likely dead, exiting for restart');
+  process.exit(1);
+}, 45000);
+tunnel.on('url', () => clearTimeout(urlTimer));
+
 tunnel.open((err) => {
   if (err) {
     console.error(`[tunnel] failed to open: ${err.message}`);
